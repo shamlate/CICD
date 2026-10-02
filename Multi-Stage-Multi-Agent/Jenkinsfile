@@ -1,0 +1,91 @@
+pipeline {
+    agent none
+
+    environment {
+        DB_NAME = 'appdb'
+        DB_USER = 'appuser'
+        DB_PASSWORD = 'apppassword'
+        DB_HOST = 'postgres'
+        DB_PORT = '5432'
+    }
+
+    stages {
+
+        stage('Start Database') {
+            agent any
+
+            steps {
+                sh '''
+                    docker network create app-network || true
+
+                    docker run -d \
+                      --name postgres \
+                      --network app-network \
+                      -e POSTGRES_DB=$DB_NAME \
+                      -e POSTGRES_USER=$DB_USER \
+                      -e POSTGRES_PASSWORD=$DB_PASSWORD \
+                      postgres:16-alpine
+
+                    echo "Waiting for PostgreSQL..."
+
+                    until docker exec postgres pg_isready \
+                      -U $DB_USER \
+                      -d $DB_NAME; do
+                        sleep 2
+                    done
+
+                    echo "PostgreSQL is ready"
+                '''
+            }
+        }
+
+        stage('Back-end') {
+            agent {
+                docker {
+                    image 'maven:3.8.8-eclipse-temurin-11'
+                    args '--network app-network'
+                }
+            }
+
+            steps {
+                sh 'mvn --version'
+
+                sh '''
+                    mvn clean test \
+                      -Dspring.datasource.url=jdbc:postgresql://postgres:5432/$DB_NAME \
+                      -Dspring.datasource.username=$DB_USER \
+                      -Dspring.datasource.password=$DB_PASSWORD
+                '''
+            }
+        }
+
+        stage('Front-end') {
+            agent {
+                docker {
+                    image 'node:20-alpine'
+                }
+            }
+
+            steps {
+                sh 'node --version'
+                sh 'npm --version'
+
+                sh 'npm ci'
+                sh 'npm test -- --runInBand'
+                sh 'npm run build'
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker logs postgres || true
+                docker rm -f postgres || true
+                docker network rm app-network || true
+            '''
+        }
+    }
+}
+
+
