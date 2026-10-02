@@ -1,0 +1,10 @@
+{
+  "name": "jenkins-frontend-demo",
+  "version": "1.0.0",
+  "description": "Simple Node.js frontend for Jenkins CI pipeline",
+  "main": "test.js",
+  "scripts": {
+    "test": "node test.js",
+    "build": "echo Frontend build successful"
+  }
+}
