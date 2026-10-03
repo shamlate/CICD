@@ -4,6 +4,9 @@ we will artifcat / output of build in  cd /var/lib/jenkins/workspace/Multi-Stage
 
 
 but there will not .jr file because w e used mvn clean test , if want to jar file use mvn clean package in backendstage of pipline 
+ we need  jar file to create decker image of  artifact than wee can deploy it .
+
+ so in CICD we must use --> mvn clean package 
 
  Then you should see something like:
 
