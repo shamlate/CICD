@@ -76,7 +76,7 @@ pipeline {
             find . -maxdepth 3 -type f | sort
         '''
 
-        dir('backend') {
+        dir('Multi-Stage-Multi-Agent/backend') {
             sh '''
                 echo "===== BACKEND ====="
                 pwd
@@ -108,7 +108,7 @@ pipeline {
 
                 checkout scm
 
-                dir('frontend') {
+                dir('Multi-Stage-Multi-Agent/frontend') {
 
                     sh '''
                         echo "=========================================="
