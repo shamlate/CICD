@@ -7,9 +7,6 @@ pipeline {
 
     stages {
 
-        // =========================================================
-        // START DATABASE
-        // =========================================================
         stage('Start Database') {
 
             agent any
@@ -22,8 +19,6 @@ pipeline {
                     echo "Starting PostgreSQL"
                     echo "=========================================="
 
-                    echo "Checking Docker network..."
-
                     docker network inspect app-network >/dev/null 2>&1 || \
                     docker network create app-network
 
@@ -31,7 +26,7 @@ pipeline {
 
                     docker rm -f postgres >/dev/null 2>&1 || true
 
-                    echo "Starting PostgreSQL container..."
+                    echo "Starting PostgreSQL..."
 
                     docker run -d \
                         --name postgres \
@@ -48,7 +43,7 @@ pipeline {
                         -U appuser \
                         -d appdb >/dev/null 2>&1
                     do
-                        echo "PostgreSQL is not ready yet..."
+                        echo "PostgreSQL is not ready..."
                         sleep 2
                     done
 
@@ -58,9 +53,6 @@ pipeline {
         }
 
 
-        // =========================================================
-        // BACK-END
-        // =========================================================
         stage('Back-end') {
 
             agent {
@@ -74,8 +66,6 @@ pipeline {
 
                 checkout scm
 
-                // IMPORTANT:
-                // pom.xml is inside backend/
                 dir('backend') {
 
                     sh '''
@@ -109,9 +99,6 @@ pipeline {
         }
 
 
-        // =========================================================
-        // FRONT-END
-        // =========================================================
         stage('Front-end') {
 
             agent {
@@ -124,7 +111,6 @@ pipeline {
 
                 checkout scm
 
-                // Frontend files are inside frontend/
                 dir('frontend') {
 
                     sh '''
@@ -152,7 +138,7 @@ pipeline {
 
                         npm test
 
-                        echo "Frontend build completed successfully!"
+                        echo "Frontend tests completed successfully!"
                     '''
                 }
             }
@@ -160,47 +146,18 @@ pipeline {
     }
 
 
-    // =============================================================
-    // POST ACTIONS
-    // =============================================================
     post {
-
-        always {
-
-            // Because pipeline uses agent none,
-            // provide a Jenkins node for Docker cleanup.
-            node {
-
-                sh '''
-                    echo "=========================================="
-                    echo "CLEANUP"
-                    echo "=========================================="
-
-                    echo "Removing PostgreSQL container..."
-
-                    docker rm -f postgres >/dev/null 2>&1 || true
-
-                    echo "Removing Docker network..."
-
-                    docker network rm app-network >/dev/null 2>&1 || true
-
-                    echo "Cleanup completed."
-                '''
-            }
-        }
 
         success {
             echo "=========================================="
             echo "PIPELINE SUCCESS"
             echo "=========================================="
-            echo "All stages completed successfully!"
         }
 
         failure {
             echo "=========================================="
             echo "PIPELINE FAILED"
             echo "=========================================="
-            echo "Please check the failed stage above."
         }
     }
 }
