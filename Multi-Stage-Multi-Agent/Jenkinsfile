@@ -1,45 +1,67 @@
 pipeline {
     agent none
 
-    environment {
-        DB_NAME = 'appdb'
-        DB_USER = 'appuser'
-        DB_PASSWORD = 'apppassword'
-        DB_HOST = 'postgres'
-        DB_PORT = '5432'
+    options {
+        skipDefaultCheckout(true)
     }
 
     stages {
 
+        /*
+         * ---------------------------------------------------------
+         * STAGE 1: START DATABASE
+         * ---------------------------------------------------------
+         */
         stage('Start Database') {
             agent any
 
             steps {
+                checkout scm
+
                 sh '''
-                    docker network create app-network || true
+                    echo "Creating Docker network..."
+
+                    docker network inspect app-network >/dev/null 2>&1 || \
+                    docker network create app-network
+
+                    echo "Removing old PostgreSQL container if present..."
+
+                    docker rm -f postgres >/dev/null 2>&1 || true
+
+                    echo "Starting PostgreSQL..."
 
                     docker run -d \
-                      --name postgres \
-                      --network app-network \
-                      -e POSTGRES_DB=$DB_NAME \
-                      -e POSTGRES_USER=$DB_USER \
-                      -e POSTGRES_PASSWORD=$DB_PASSWORD \
-                      postgres:16-alpine
+                        --name postgres \
+                        --network app-network \
+                        -e POSTGRES_DB=appdb \
+                        -e POSTGRES_USER=appuser \
+                        -e POSTGRES_PASSWORD=apppassword \
+                        postgres:16-alpine
 
                     echo "Waiting for PostgreSQL..."
 
-                    until docker exec postgres pg_isready \
-                      -U $DB_USER \
-                      -d $DB_NAME; do
+                    until docker exec postgres \
+                        pg_isready \
+                        -U appuser \
+                        -d appdb >/dev/null 2>&1
+                    do
+                        echo "PostgreSQL is not ready yet..."
                         sleep 2
                     done
 
-                    echo "PostgreSQL is ready"
+                    echo "PostgreSQL is ready!"
                 '''
             }
         }
 
+
+        /*
+         * ---------------------------------------------------------
+         * STAGE 2: BACK-END
+         * ---------------------------------------------------------
+         */
         stage('Back-end') {
+
             agent {
                 docker {
                     image 'maven:3.8.8-eclipse-temurin-11'
@@ -48,18 +70,51 @@ pipeline {
             }
 
             steps {
-                sh 'mvn --version'
 
-                sh '''
-                    mvn clean test \
-                      -Dspring.datasource.url=jdbc:postgresql://postgres:5432/$DB_NAME \
-                      -Dspring.datasource.username=$DB_USER \
-                      -Dspring.datasource.password=$DB_PASSWORD
-                '''
+                checkout scm
+
+                /*
+                 * IMPORTANT:
+                 * pom.xml is inside backend/
+                 */
+                dir('backend') {
+
+                    sh '''
+                        echo "======================================"
+                        echo "Backend Build"
+                        echo "======================================"
+
+                        echo "Current directory:"
+                        pwd
+
+                        echo "Backend files:"
+                        ls -la
+
+                        echo "Checking pom.xml:"
+                        ls -l pom.xml
+
+                        echo "Maven version:"
+                        mvn --version
+
+                        echo "Running Maven tests..."
+
+                        mvn clean test \
+                          -Dspring.datasource.url=jdbc:postgresql://postgres:5432/appdb \
+                          -Dspring.datasource.username=appuser \
+                          -Dspring.datasource.password=apppassword
+                    '''
+                }
             }
         }
 
+
+        /*
+         * ---------------------------------------------------------
+         * STAGE 3: FRONT-END
+         * ---------------------------------------------------------
+         */
         stage('Front-end') {
+
             agent {
                 docker {
                     image 'node:20-alpine'
@@ -67,25 +122,73 @@ pipeline {
             }
 
             steps {
-                sh 'node --version'
-                sh 'npm --version'
 
-                sh 'npm ci'
-                sh 'npm test -- --runInBand'
-                sh 'npm run build'
+                checkout scm
+
+                dir('frontend') {
+
+                    sh '''
+                        echo "======================================"
+                        echo "Frontend Build"
+                        echo "======================================"
+
+                        echo "Current directory:"
+                        pwd
+
+                        echo "Frontend files:"
+                        ls -la
+
+                        echo "Node version:"
+                        node --version
+
+                        echo "NPM version:"
+                        npm --version
+
+                        echo "Installing dependencies..."
+
+                        npm install
+
+                        echo "Running frontend tests..."
+
+                        npm test
+                    '''
+                }
             }
         }
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * POST ACTIONS
+     * ---------------------------------------------------------
+     */
     post {
+
         always {
-            sh '''
-                docker logs postgres || true
-                docker rm -f postgres || true
-                docker network rm app-network || true
-            '''
+
+            node {
+
+                sh '''
+                    echo "======================================"
+                    echo "Cleaning up Docker resources"
+                    echo "======================================"
+
+                    docker rm -f postgres >/dev/null 2>&1 || true
+
+                    docker network rm app-network >/dev/null 2>&1 || true
+
+                    echo "Cleanup completed."
+                '''
+            }
+        }
+
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+
+        failure {
+            echo 'Pipeline failed. Please check the stage logs.'
         }
     }
 }
-
-
