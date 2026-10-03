@@ -7,28 +7,31 @@ pipeline {
 
     stages {
 
-        /*
-         * ---------------------------------------------------------
-         * STAGE 1: START DATABASE
-         * ---------------------------------------------------------
-         */
+        // =========================================================
+        // START DATABASE
+        // =========================================================
         stage('Start Database') {
+
             agent any
 
             steps {
                 checkout scm
 
                 sh '''
-                    echo "Creating Docker network..."
+                    echo "=========================================="
+                    echo "Starting PostgreSQL"
+                    echo "=========================================="
+
+                    echo "Checking Docker network..."
 
                     docker network inspect app-network >/dev/null 2>&1 || \
                     docker network create app-network
 
-                    echo "Removing old PostgreSQL container if present..."
+                    echo "Removing old PostgreSQL container..."
 
                     docker rm -f postgres >/dev/null 2>&1 || true
 
-                    echo "Starting PostgreSQL..."
+                    echo "Starting PostgreSQL container..."
 
                     docker run -d \
                         --name postgres \
@@ -55,11 +58,9 @@ pipeline {
         }
 
 
-        /*
-         * ---------------------------------------------------------
-         * STAGE 2: BACK-END
-         * ---------------------------------------------------------
-         */
+        // =========================================================
+        // BACK-END
+        // =========================================================
         stage('Back-end') {
 
             agent {
@@ -73,16 +74,14 @@ pipeline {
 
                 checkout scm
 
-                /*
-                 * IMPORTANT:
-                 * pom.xml is inside backend/
-                 */
+                // IMPORTANT:
+                // pom.xml is inside backend/
                 dir('backend') {
 
                     sh '''
-                        echo "======================================"
-                        echo "Backend Build"
-                        echo "======================================"
+                        echo "=========================================="
+                        echo "BACKEND BUILD"
+                        echo "=========================================="
 
                         echo "Current directory:"
                         pwd
@@ -99,20 +98,20 @@ pipeline {
                         echo "Running Maven tests..."
 
                         mvn clean test \
-                          -Dspring.datasource.url=jdbc:postgresql://postgres:5432/appdb \
-                          -Dspring.datasource.username=appuser \
-                          -Dspring.datasource.password=apppassword
+                            -Dspring.datasource.url=jdbc:postgresql://postgres:5432/appdb \
+                            -Dspring.datasource.username=appuser \
+                            -Dspring.datasource.password=apppassword
+
+                        echo "Backend build completed successfully!"
                     '''
                 }
             }
         }
 
 
-        /*
-         * ---------------------------------------------------------
-         * STAGE 3: FRONT-END
-         * ---------------------------------------------------------
-         */
+        // =========================================================
+        // FRONT-END
+        // =========================================================
         stage('Front-end') {
 
             agent {
@@ -125,12 +124,13 @@ pipeline {
 
                 checkout scm
 
+                // Frontend files are inside frontend/
                 dir('frontend') {
 
                     sh '''
-                        echo "======================================"
-                        echo "Frontend Build"
-                        echo "======================================"
+                        echo "=========================================="
+                        echo "FRONTEND BUILD"
+                        echo "=========================================="
 
                         echo "Current directory:"
                         pwd
@@ -151,6 +151,8 @@ pipeline {
                         echo "Running frontend tests..."
 
                         npm test
+
+                        echo "Frontend build completed successfully!"
                     '''
                 }
             }
@@ -158,23 +160,27 @@ pipeline {
     }
 
 
-    /*
-     * ---------------------------------------------------------
-     * POST ACTIONS
-     * ---------------------------------------------------------
-     */
+    // =============================================================
+    // POST ACTIONS
+    // =============================================================
     post {
 
         always {
 
+            // Because pipeline uses agent none,
+            // provide a Jenkins node for Docker cleanup.
             node {
 
                 sh '''
-                    echo "======================================"
-                    echo "Cleaning up Docker resources"
-                    echo "======================================"
+                    echo "=========================================="
+                    echo "CLEANUP"
+                    echo "=========================================="
+
+                    echo "Removing PostgreSQL container..."
 
                     docker rm -f postgres >/dev/null 2>&1 || true
+
+                    echo "Removing Docker network..."
 
                     docker network rm app-network >/dev/null 2>&1 || true
 
@@ -184,11 +190,17 @@ pipeline {
         }
 
         success {
-            echo 'Pipeline completed successfully!'
+            echo "=========================================="
+            echo "PIPELINE SUCCESS"
+            echo "=========================================="
+            echo "All stages completed successfully!"
         }
 
         failure {
-            echo 'Pipeline failed. Please check the stage logs.'
+            echo "=========================================="
+            echo "PIPELINE FAILED"
+            echo "=========================================="
+            echo "Please check the failed stage above."
         }
     }
 }
