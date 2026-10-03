@@ -54,50 +54,47 @@ pipeline {
 
 
         stage('Back-end') {
-
-            agent {
-                docker {
-                    image 'maven:3.8.8-eclipse-temurin-11'
-                    args '--network app-network'
-                }
-            }
-
-            steps {
-
-                checkout scm
-
-                dir('backend') {
-
-                    sh '''
-                        echo "=========================================="
-                        echo "BACKEND BUILD"
-                        echo "=========================================="
-
-                        echo "Current directory:"
-                        pwd
-
-                        echo "Backend files:"
-                        ls -la
-
-                        echo "Checking pom.xml:"
-                        ls -l pom.xml
-
-                        echo "Maven version:"
-                        mvn --version
-
-                        echo "Running Maven tests..."
-
-                        mvn clean test \
-                            -Dspring.datasource.url=jdbc:postgresql://postgres:5432/appdb \
-                            -Dspring.datasource.username=appuser \
-                            -Dspring.datasource.password=apppassword
-
-                        echo "Backend build completed successfully!"
-                    '''
-                }
-            }
+    agent {
+        docker {
+            image 'maven:3.8.8-eclipse-temurin-11'
+            args '--network app-network'
         }
+    }
 
+    steps {
+        checkout scm
+
+        sh '''
+            echo "===== GIT CHECK ====="
+            echo "Commit:"
+            git rev-parse HEAD
+
+            echo "===== FILES IN GIT ====="
+            git ls-tree -r --name-only HEAD
+
+            echo "===== WORKSPACE FILES ====="
+            find . -maxdepth 3 -type f | sort
+        '''
+
+        dir('backend') {
+            sh '''
+                echo "===== BACKEND ====="
+                pwd
+                ls -la
+
+                echo "Checking pom.xml..."
+                ls -l pom.xml
+
+                mvn --version
+
+                mvn clean test \
+                  -Dspring.datasource.url=jdbc:postgresql://postgres:5432/appdb \
+                  -Dspring.datasource.username=appuser \
+                  -Dspring.datasource.password=apppassword
+            '''
+        }
+    }
+}
 
         stage('Front-end') {
 
