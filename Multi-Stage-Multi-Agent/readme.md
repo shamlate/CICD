@@ -15,5 +15,7 @@ target/
 ├── test-classes/
 └── demo-0.0.1-SNAPSHOT.jar
 
+we used  SCM  check out --source code management repo  for check out , and we given repo url  and Jenkin file path  while configuring the SCM in Jenkins 
+
 
 
